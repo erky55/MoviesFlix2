@@ -1,0 +1,5 @@
+Beautifulsoup4
+requests
+aiohttp
+user-agent
+aiohttp-client-cache
