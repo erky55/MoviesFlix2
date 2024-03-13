@@ -8,13 +8,21 @@ from swibots import *
 from gomovies import GoMovies
 from decouple import config
 
-movies = GoMovies()
+ 
 
+movies = GoMovies()
+BOT_TOKEN = config("BOT_TOKEN", default="")
 
 app = Client(
-    config("BOT_TOKEN", default="")
+    BOT_TOKEN
 )
-app.set_bot_commands([BotCommand("start", "Get start message", True)])
+
+app.set_bot_commands(
+    [
+        BotCommand("start", "Get start message", True),
+        BotCommand("search", "Search by commands", True),
+    ]
+)
 
 
 @app.on_command("start")
@@ -46,9 +54,7 @@ async def onHome(ctx: BotContext[CallbackQueryEvent]):
 
     await ctx.event.answer(
         callback=AppPage(
-            components=comps,
-            screen=ScreenType.BOTTOM,
-            show_continue=False
+            components=comps, screen=ScreenType.BOTTOM, show_continue=False
         ),
         new_page=True,
     )
@@ -94,13 +100,16 @@ async def onHome(ctx: BotContext[CallbackQueryEvent]):
     urls = list(sources.values())
     #    print(urls)
     await ctx.event.answer(
-        callback=AppPage(components=[Embed(urls[-1], full_screen=True)]), new_page=True
+        callback=AppPage(
+            components=[Embed(urls[-1], full_screen=True, landscape=True)]
+        ),
+        new_page=True,
     )
 
 
 @app.on_callback_query(regexp("info"))
-async def onHome(ctx: BotContext[CallbackQueryEvent]):
-    mId = ctx.event.callback_data.split("|")[-1]
+async def showMovie(ctx: BotContext[CallbackQueryEvent], movieId=None):
+    mId = movieId or ctx.event.callback_data.split("|")[-1]
     info = await movies.getInfo(mId)
 
     comps = [Text(info["title"], TextSize.SMALL)]
@@ -111,6 +120,8 @@ async def onHome(ctx: BotContext[CallbackQueryEvent]):
             Button("Watch Now", callback_data=f"watch|{mId}"),
         ]
     )
+    if movieId:
+        comps.append(Button("Home", callback_data="Home"))
     if info.get("meta"):
         for i, y in info["meta"].items():
             comps.append(Text(f"*{i}:* {y}"))
@@ -226,6 +237,89 @@ async def Home(ctx: BotContext[CallbackQueryEvent]):
             comps.append(Text(f"No results found!", TextSize.SMALL))
 
     await ctx.event.answer(callback=AppPage(components=comps), new_page=not query)
+
+
+def splitList(lis, n):
+    res = []
+    while lis:
+        res.append(lis[:n])
+        lis = lis[n:]
+    return res
+
+
+async def searchMovie(
+    ctx: BotContext[CommandEvent], query: str, offset: int = 0, from_callback=False
+):
+    m = ctx.event.message
+    if not from_callback:
+        s = await m.reply_text("🔍 Searching Movies")
+    wordLength = len(query)
+    results = []
+    while len(results) < 10 and wordLength:
+        soup = BeautifulSoup(
+            (
+                await movies.get(
+                    f"/ajax/film/search?keyword={query.replace(' ', '+')[:wordLength]}",
+                    parse_json=True,
+                )
+            )["result"]["html"],
+            "html.parser",
+        )
+        wordLength -= 1
+        for movie in soup.find_all("a")[:-1]:
+            data = {"title": movie.text.strip(), "id": movie.get("href")}
+            if data not in results:
+                results.append(data)
+        wordLength -= 1
+    size = 8
+    splitOut = splitList(results, size)
+    splitt = splitOut[offset]
+    message = f"""🍿 *Total Results:* {len(results)}\n__{ctx.event.user.name}__ searched for __{query}__"""
+    mkup = [
+        [InlineKeyboardButton(i["title"], callback_data=f"splay|{i['id']}")]
+        for i in splitt
+    ]
+    bts = []
+    try:
+        splitOut[offset - 1]
+        bts.append(
+            InlineKeyboardButton("🔙 Previous", callback_data=f"sct|{query}|{offset-1}")
+        )
+    except IndexError:
+        pass
+    try:
+        splitOut[offset + 1]
+        bts.append(
+            InlineKeyboardButton("Next ▶️", callback_data=f"sct|{query}|{offset+1}")
+        )
+    except IndexError:
+        pass
+    if bts:
+        mkup.append(bts)
+    if from_callback:
+        await m.edit_text(message, inline_markup=InlineMarkup(mkup))
+    else:
+        await m.reply_text(message, inline_markup=InlineMarkup(mkup))
+        await s.delete()
+
+
+@app.on_callback_query(regexp("splay"))
+async def showCallback(ctx: BotContext[CallbackQueryEvent]):
+    movieID = ctx.event.callback_data.split("|")[-1]
+    await showMovie(ctx, movieID)
+
+
+@app.on_callback_query(regexp("sct"))
+async def showCallback(ctx: BotContext[CallbackQueryEvent]):
+    query, offset = ctx.event.callback_data.split("|")[1:]
+    await searchMovie(ctx, query, int(offset), from_callback=True)
+
+
+@app.on_command("search")
+async def onSearch(ctx: BotContext[CommandEvent]):
+    if not ctx.event.params:
+        return await ctx.event.message.reply_text(f"🍿 Provide movie name to search!")
+    await searchMovie(ctx, ctx.event.params)
 
 
 app.run()
