@@ -101,7 +101,8 @@ async def onHome(ctx: BotContext[CallbackQueryEvent]):
     #    print(urls)
     await ctx.event.answer(
         callback=AppPage(
-            components=[Embed(urls[-1], full_screen=True, landscape=True)]
+            components=[Embed(urls[-1], full_screen=True, landscape=True,
+                             allow_navigation=False)]
         ),
         new_page=True,
     )
