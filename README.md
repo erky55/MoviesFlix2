@@ -28,6 +28,7 @@ Make sure you have the following installed before running the project:
 
     ```env
     BOT_TOKEN=your_bot_token
+    TMDB_KEY=your the movie db token
     ```
 
     Replace `your_bot_token` with the actual token for your bot.
