@@ -266,7 +266,6 @@ async def onHome(ctx: BotContext[CallbackQueryEvent]):
             "Home",
             #            icon="https://f004.backblazeb2.com/file/switch-bucket/54b25c03-ea21-11ee-af4a-d41b81d4a9f0.png",
             callback_data=f"Home|{'Movies' if type == 'movie' else 'TV'}",
-            variant="",
         )
     )
     await ctx.event.answer(callback=AppPage(components=comps), new_page=True)
